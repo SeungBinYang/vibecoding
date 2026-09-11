@@ -1,12 +1,12 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { Badge, NameChip, TextInput, OutlineButton } from "@/components/ui";
-import { getSchedule, getAttendances, saveAttendance, isCurrentAdmin } from "@/lib/storage";
-import type { Attendance } from "@/lib/storage";
+import { isCurrentAdmin } from "@/lib/storage";
+import type { Attendance, Member, Schedule } from "@/lib/storage";
 
 interface PageProps {
   params: Promise<{ title: string }>;
@@ -21,8 +21,32 @@ export default function ScheduleDetailPage({ params }: PageProps) {
   const [name, setName] = useState("");
   const [submitError, setSubmitError] = useState<string>("");
 
-  // 일정 데이터 로드
-  const schedule = getSchedule(decodedTitle);
+  // 일정 · 참석 응답 · 구성원 명단을 서버(데이터베이스)에서 읽기
+  const [loading, setLoading] = useState(true);
+  const [schedule, setSchedule] = useState<Schedule | undefined>(undefined);
+  const [attendances, setAttendances] = useState<Attendance[]>([]);
+  const [members, setMembersState] = useState<Member[]>([]);
+
+  const loadData = useCallback(async () => {
+    const scheduleRes = await fetch(`/api/schedules/${encodeURIComponent(decodedTitle)}`);
+    const loadedSchedule: Schedule | null = scheduleRes.ok ? await scheduleRes.json() : null;
+    const [attendancesRes, membersRes] = await Promise.all([
+      fetch(`/api/attendances?schedule=${encodeURIComponent(decodedTitle)}`),
+      fetch("/api/members"),
+    ]);
+    const loadedAttendances: Attendance[] = await attendancesRes.json();
+    const loadedMembers: Member[] = await membersRes.json();
+    setSchedule(loadedSchedule ?? undefined);
+    setAttendances(loadedAttendances);
+    setMembersState(loadedMembers);
+    setLoading(false);
+  }, [decodedTitle]);
+
+  useEffect(() => {
+    void (async () => {
+      await loadData();
+    })();
+  }, [loadData]);
 
   // 상태값 판정
   const isUpcoming = schedule?.status === "예정";
@@ -33,26 +57,19 @@ export default function ScheduleDetailPage({ params }: PageProps) {
   const canEdit = isAdmin && isUpcoming;
 
   // 참석 응답 데이터 (F4)
-  const attendances = schedule ? getAttendances(decodedTitle) : [];
-  const attendList = attendances
-    .filter((a) => a.answer === "참석")
-    .map((a) => a.name);
-  const absentList = attendances
-    .filter((a) => a.answer === "불참")
-    .map((a) => a.name);
+  const attendList = attendances.filter((a) => a.answer === "참석").map((a) => a.name);
+  const absentList = attendances.filter((a) => a.answer === "불참").map((a) => a.name);
 
   // 미응답 명단 계산 (F4 · P1 — 총무만)
   // [?] 미응답 명단이 총무만 보는지 명시적으로 묻지는 않았으나, F4 "총무가 일정을 열면"으로 해석
-  const members = globalThis.localStorage?.getItem("team-schedule:members");
   let pendingList: string[] = [];
   if (isAdmin && schedule) {
-    const memberList = members ? JSON.parse(members) : [];
     const respondedNames = new Set(attendances.map((a) => a.name));
-    pendingList = memberList.filter((m: { name: string }) => !respondedNames.has(m.name)).map((m: { name: string }) => m.name);
+    pendingList = members.filter((m) => !respondedNames.has(m.name)).map((m) => m.name);
   }
 
   // 참석/불참 저장 (F3 · P5)
-  const handleAttendance = (answer: "참석" | "불참") => {
+  const handleAttendance = async (answer: "참석" | "불참") => {
     if (!name.trim()) {
       setSubmitError("이름을 입력하세요");
       return;
@@ -66,11 +83,19 @@ export default function ScheduleDetailPage({ params }: PageProps) {
     };
 
     try {
-      saveAttendance(attendance);
+      const res = await fetch("/api/attendances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(attendance),
+      });
+      if (!res.ok) {
+        const { error } = await res.json();
+        throw new Error(error);
+      }
       setName("");
       setSubmitError("");
-      // 페이지 새로고침으로 명단 반영
-      router.refresh();
+      // 명단 반영
+      await loadData();
     } catch (error) {
       setSubmitError((error as Error).message || "저장 실패");
     }
@@ -84,6 +109,14 @@ export default function ScheduleDetailPage({ params }: PageProps) {
     const dayOfWeek = ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
     return `${month}월 ${day}일(${dayOfWeek})`;
   };
+
+  if (loading) {
+    return (
+      <Screen>
+        <ScreenHeader title="일정 상세" onBack={() => router.back()} />
+      </Screen>
+    );
+  }
 
   if (!schedule) {
     return (
