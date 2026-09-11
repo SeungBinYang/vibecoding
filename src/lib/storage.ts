@@ -123,6 +123,14 @@ function assertValid(reason: string | null): void {
   if (reason) throw new Error(reason);
 }
 
+/* ── 총무 판정 (P1) ── */
+/* [?] 총무를 어떻게 판정할 건지 정하지 않았다(로그인 화면은 만들지 않기로 함).
+   ponytail: 기기 하나 = 총무 한 명으로 가정해 기본값을 총무로 둔다 — 실제 판정 방법이 정해지면 교체.
+   구성원 화면 테스트: localStorage.setItem("currentAdmin", "0") */
+export function isCurrentAdmin(): boolean {
+  return globalThis.localStorage?.getItem("currentAdmin") !== "0";
+}
+
 /* ── 일정 ── */
 
 export function getSchedules(): Schedule[] {

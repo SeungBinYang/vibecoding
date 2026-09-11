@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { Badge, NameChip, TextInput, OutlineButton } from "@/components/ui";
-import { getSchedule, getAttendances, saveAttendance } from "@/lib/storage";
+import { getSchedule, getAttendances, saveAttendance, isCurrentAdmin } from "@/lib/storage";
 import type { Attendance } from "@/lib/storage";
 
 interface PageProps {
@@ -29,8 +29,7 @@ export default function ScheduleDetailPage({ params }: PageProps) {
   const isStarted = schedule && schedule.status !== "예정";
 
   // 총무 판정 (P1 · P4)
-  const currentAdmin = globalThis.localStorage?.getItem("currentAdmin");
-  const isAdmin = !!currentAdmin;
+  const isAdmin = isCurrentAdmin();
   const canEdit = isAdmin && isUpcoming;
 
   // 참석 응답 데이터 (F4)

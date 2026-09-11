@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { ScheduleCard } from "@/components/schedule-card";
-import { getSchedules, getAttendances } from "@/lib/storage";
+import { getSchedules, getAttendances, isCurrentAdmin } from "@/lib/storage";
 import { IconButton } from "@/components/ui";
 import { PlusIcon } from "@/components/icons";
 
@@ -18,13 +18,9 @@ export default function ScheduleListPage() {
       .filter((s) => s.status === "예정" || s.status === "진행 중")
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // P1: 총무 판정 — localStorage의 currentAdmin 키 확인
-    // [?] 총무를 어떻게 판정할 건지 아직 정하지 않았으므로, 임시로 currentAdmin 키 사용
-    const currentAdmin = globalThis.localStorage?.getItem("currentAdmin");
-
     return {
       schedules: upcomingSchedules,
-      isAdmin: !!currentAdmin,
+      isAdmin: isCurrentAdmin(),
     };
   });
 
